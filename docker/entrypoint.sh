@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
 set -e
 
-alembic upgrade head
+python -m alembic upgrade head
 exec python -m bot.main
