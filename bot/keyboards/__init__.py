@@ -1,3 +1,4 @@
+from bot.keyboards.help import help_menu_kb, help_section_kb
 from bot.keyboards.menus import (
     back_to_menu_kb,
     cancel_add_channel_kb,
@@ -19,4 +20,6 @@ __all__ = [
     "vote_kb",
     "tournament_join_kb",
     "judges_random_kb",
+    "help_menu_kb",
+    "help_section_kb",
 ]
