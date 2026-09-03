@@ -6,6 +6,7 @@ from bot.keyboards.menus import (
     subs_list_kb,
     target_chat_choice_kb,
 )
+from bot.keyboards.tournament import ban_phase_kb, judges_random_kb, tournament_join_kb, vote_kb
 
 __all__ = [
     "main_menu_kb",
@@ -14,4 +15,8 @@ __all__ = [
     "cancel_pending_kb",
     "target_chat_choice_kb",
     "subs_list_kb",
+    "ban_phase_kb",
+    "vote_kb",
+    "tournament_join_kb",
+    "judges_random_kb",
 ]
