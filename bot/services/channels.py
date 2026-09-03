@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models import Channel
+from bot.db import Channel
 
 
 async def upsert_channel(

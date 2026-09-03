@@ -11,6 +11,24 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def back_to_menu_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🏠 Главное меню", callback_data="main_menu")
+    return kb.as_markup()
+
+
+def cancel_add_channel_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Отмена", callback_data="cancel_add_channel")
+    return kb.as_markup()
+
+
+def cancel_pending_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Отмена", callback_data="cancel_pending")
+    return kb.as_markup()
+
+
 def target_chat_choice_kb(channel_id: int, target_chats) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for tc in target_chats:
@@ -19,6 +37,7 @@ def target_chat_choice_kb(channel_id: int, target_chats) -> InlineKeyboardMarkup
             callback_data=f"pick_chat:{channel_id}:{tc.id}",
         )
     kb.button(text="➕ Новый чат", callback_data=f"new_chat:{channel_id}")
+    kb.button(text="🏠 Главное меню", callback_data="main_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -29,5 +48,7 @@ def subs_list_kb(subs) -> InlineKeyboardMarkup:
         channel_label = sub.channel.title or sub.channel.username or str(sub.channel.tg_chat_id)
         chat_label = sub.target_chat.title or str(sub.target_chat.tg_chat_id)
         kb.button(text=f"🗑 {channel_label} → {chat_label}", callback_data=f"del_sub:{sub.id}")
+    kb.button(text="➕ Добавить канал", callback_data="add_channel")
+    kb.button(text="🏠 Главное меню", callback_data="main_menu")
     kb.adjust(1)
     return kb.as_markup()

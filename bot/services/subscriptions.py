@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from bot.models import BotUser, Subscription, TargetChat
+from bot.db import BotUser, Subscription, TargetChat
 
 
 async def upsert_target_chat(

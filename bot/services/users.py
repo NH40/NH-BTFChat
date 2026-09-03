@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models import BotUser
+from bot.db import BotUser
 
 
 async def get_or_create_user(session: AsyncSession, tg_user_id: int, username: str | None) -> BotUser:

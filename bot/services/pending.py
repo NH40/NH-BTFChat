@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models import PendingAction
+from bot.db import PendingAction
 
 
 async def set_pending(session: AsyncSession, tg_user_id: int, action: str, payload: dict) -> None:

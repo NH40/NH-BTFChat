@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from bot.config import settings
-from bot.models import Base
+from bot.db import Base
 
 config = context.config
 if config.config_file_name is not None:

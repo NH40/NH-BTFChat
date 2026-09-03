@@ -3,11 +3,9 @@ from __future__ import annotations
 import datetime as dt
 
 from sqlalchemy import BigInteger, ForeignKey, JSON, String, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    pass
+from bot.db.base import Base
 
 
 class BotUser(Base):
@@ -70,6 +68,39 @@ class Subscription(Base):
 
     channel: Mapped["Channel"] = relationship(back_populates="subscriptions")
     target_chat: Mapped["TargetChat"] = relationship(back_populates="subscriptions")
+
+
+class SourcePost(Base):
+    __tablename__ = "source_posts"
+    __table_args__ = (UniqueConstraint("channel_id", "source_message_id", name="uq_channel_message"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"))
+    source_message_id: Mapped[int] = mapped_column(BigInteger)
+    media_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+    last_checked_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+
+    channel: Mapped["Channel"] = relationship()
+    copies: Mapped[list["PostCopy"]] = relationship(
+        back_populates="source_post", cascade="all, delete-orphan"
+    )
+
+
+class PostCopy(Base):
+    __tablename__ = "post_copies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_post_id: Mapped[int] = mapped_column(
+        ForeignKey("source_posts.id", ondelete="CASCADE"), index=True
+    )
+    target_chat_tg_id: Mapped[int] = mapped_column(BigInteger)
+    target_message_id: Mapped[int] = mapped_column(BigInteger)
+    is_signature: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+
+    source_post: Mapped["SourcePost"] = relationship(back_populates="copies")
 
 
 class PendingAction(Base):

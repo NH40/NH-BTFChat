@@ -2,11 +2,13 @@ from aiogram import Bot, Router
 from aiogram.types import ChatMemberUpdated
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards import target_chat_choice_kb
+from bot.keyboards import back_to_menu_kb, target_chat_choice_kb
 from bot.services import channels as channel_service
 from bot.services import pending as pending_service
 from bot.services import subscriptions as sub_service
 from bot.services import users as user_service
+from bot.texts import membership as texts
+from bot.texts.channels import offer_target_chat_prompt
 
 router = Router(name="membership")
 
@@ -52,7 +54,7 @@ async def handle_channel_membership(update: ChatMemberUpdated, session: AsyncSes
     target_chats = await sub_service.list_target_chats(session, user.id)
     await bot.send_message(
         actor.id,
-        f"Канал «{chat.title}» подключён. Куда пересылать посты?",
+        offer_target_chat_prompt(chat.title),
         reply_markup=target_chat_choice_kb(db_channel.id, target_chats),
     )
 
@@ -82,7 +84,5 @@ async def handle_group_membership(update: ChatMemberUpdated, session: AsyncSessi
     await sub_service.create_subscription(session, channel_id, target_chat.id, actor.id)
     await pending_service.clear_pending(session, actor.id)
 
-    await bot.send_message(
-        chat.id, "✅ Этот чат подключён. Сюда будут пересылаться новые посты из выбранного канала."
-    )
-    await bot.send_message(actor.id, "Готово! Посты будут пересылаться в добавленный чат.")
+    await bot.send_message(chat.id, texts.TARGET_CHAT_CONNECTED)
+    await bot.send_message(actor.id, texts.OWNER_TARGET_CONNECTED, reply_markup=back_to_menu_kb())
