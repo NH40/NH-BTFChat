@@ -20,10 +20,10 @@ class MatchOutcome:
 def validate_category_scores(scores: dict[str, int]) -> None:
     for key, max_value in SCORE_CATEGORIES.items():
         if key not in scores:
-            raise ValueError(f"missing score category: {key}")
+            raise ValueError(f"Не хватает категории оценки: {key}.")
         value = scores[key]
         if not isinstance(value, int) or isinstance(value, bool) or not (0 <= value <= max_value):
-            raise ValueError(f"{key} must be an integer between 0 and {max_value}")
+            raise ValueError(f"«{key}»: нужно целое число от 0 до {max_value}.")
 
 
 def total_score(scores: dict[str, int]) -> int:

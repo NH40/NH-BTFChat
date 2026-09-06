@@ -65,9 +65,9 @@ async def create_match(
     prep_hours: int = PREP_MAX_HOURS,
 ) -> Match:
     if player1_id == player2_id:
-        raise ValueError("a player cannot be matched against themselves")
+        raise ValueError("Игрок не может сражаться сам с собой.")
     if not 1 <= prep_hours <= PREP_MAX_HOURS:
-        raise ValueError(f"prep_hours must be between 1 and {PREP_MAX_HOURS}")
+        raise ValueError(f"Время подготовки должно быть от 1 до {PREP_MAX_HOURS} часов.")
 
     match = Match(
         universe_id=universe_id,
@@ -110,13 +110,13 @@ def player_bans(match: Match, player_id: int) -> list[MatchBan]:
 
 async def submit_ban(session: AsyncSession, match: Match, player_id: int, character_id: int) -> MatchBan:
     if match.status != STATUS_BAN_PHASE:
-        raise ValueError("bans can only be submitted during the ban phase")
+        raise ValueError("Баны можно ставить только в фазе банов.")
     if player_id not in (match.player1_id, match.player2_id):
-        raise ValueError("only match participants can ban characters")
+        raise ValueError("Банить персонажей могут только участники матча.")
     if len(player_bans(match, player_id)) >= BAN_COUNT_PER_PLAYER:
-        raise ValueError(f"each player may only ban {BAN_COUNT_PER_PLAYER} characters")
+        raise ValueError(f"Каждый игрок может забанить не больше {BAN_COUNT_PER_PLAYER} персонажей.")
     if any(ban.character_id == character_id for ban in match.bans):
-        raise ValueError("that character is already banned")
+        raise ValueError("Этот персонаж уже забанен.")
 
     ban = MatchBan(match_id=match.id, player_id=player_id, character_id=character_id)
     session.add(ban)
@@ -136,9 +136,9 @@ async def assign_random_characters(
     session: AsyncSession, match: Match, *, prep_hours: int = PREP_MAX_HOURS
 ) -> tuple[MatchPick, MatchPick]:
     if match.status != STATUS_BAN_PHASE:
-        raise ValueError("characters can only be assigned right after the ban phase")
+        raise ValueError("Персонажей можно раздать только сразу после фазы банов.")
     if not bans_complete(match):
-        raise ValueError("both players must finish banning first")
+        raise ValueError("Сначала оба игрока должны завершить баны.")
 
     char_result = await session.execute(
         select(Character.id).where(Character.universe_id == match.universe_id)
@@ -164,7 +164,7 @@ async def assign_random_characters(
 
 async def assign_judges(session: AsyncSession, match: Match, judge_player_ids: list[int]) -> list[MatchJudge]:
     if match.player1_id in judge_player_ids or match.player2_id in judge_player_ids:
-        raise ValueError("a match participant cannot also judge their own match")
+        raise ValueError("Участник матча не может судить свой же матч.")
 
     existing_ids = {j.judge_player_id for j in match.judges}
     created = []
@@ -197,18 +197,18 @@ async def advance_phase(session: AsyncSession, match: Match) -> Match:
     """
     if match.status == STATUS_BAN_PHASE:
         raise ValueError(
-            "the ban phase advances automatically once both players finish banning "
-            "(characters are assigned at that point) — it cannot be skipped manually"
+            "Фаза банов завершается автоматически, когда оба игрока добанят "
+            "(тогда же раздаются персонажи) — вручную её пропустить нельзя."
         )
 
     upcoming = next_status(match.status)
     if upcoming is None:
-        raise ValueError(f"match is already in a terminal state: {match.status}")
+        raise ValueError(f"Матч уже завершён (статус: {match.status}).")
 
     if upcoming == STATUS_ROUND_1 and len(match.picks) < 2:
-        raise ValueError("characters must be assigned before rounds can start")
+        raise ValueError("Перед началом раундов нужно раздать персонажей.")
     if upcoming == STATUS_JUDGING and len(match.judges) < MIN_JUDGES_PER_MATCH:
-        raise ValueError(f"at least {MIN_JUDGES_PER_MATCH} judges must be assigned before judging")
+        raise ValueError(f"Перед судейством нужно назначить минимум {MIN_JUDGES_PER_MATCH} судей.")
 
     match.status = upcoming
     match.reminder_sent = False
@@ -248,11 +248,11 @@ async def submit_score(
     scores: dict[str, int],
 ) -> MatchScore:
     if match.status != STATUS_JUDGING:
-        raise ValueError("scores can only be submitted during judging")
+        raise ValueError("Баллы можно вносить только в фазе судейства.")
     if judge_player_id not in {j.judge_player_id for j in match.judges}:
-        raise ValueError("this player is not an assigned judge for this match")
+        raise ValueError("Ты не назначен(а) судьёй на этот матч.")
     if target_player_id not in (match.player1_id, match.player2_id):
-        raise ValueError("target_player_id must be one of the match's players")
+        raise ValueError("Оцениваемый игрок не участвует в этом матче.")
 
     total = scoring.total_score(scores)
 
@@ -314,9 +314,9 @@ def scores_complete(match: Match) -> bool:
 
 async def finalize_match(session: AsyncSession, match: Match) -> scoring.MatchOutcome:
     if match.status != STATUS_JUDGING:
-        raise ValueError("only matches in judging can be finalized")
+        raise ValueError("Подвести итог можно только для матча в фазе судейства.")
     if not scores_complete(match):
-        raise ValueError("not all assigned judges have scored both players yet")
+        raise ValueError("Ещё не все судьи выставили баллы обоим игрокам.")
 
     p1_totals = [s.total_score for s in match.scores if s.target_player_id == match.player1_id]
     p2_totals = [s.total_score for s in match.scores if s.target_player_id == match.player2_id]
@@ -328,7 +328,7 @@ async def finalize_match(session: AsyncSession, match: Match) -> scoring.MatchOu
     player1 = await session.get(PlayerProfile, match.player1_id)
     player2 = await session.get(PlayerProfile, match.player2_id)
     if player1 is None or player2 is None:
-        raise ValueError("match players not found")
+        raise ValueError("Игроки матча не найдены.")
 
     if outcome.winner is None:
         score_a = 0.5

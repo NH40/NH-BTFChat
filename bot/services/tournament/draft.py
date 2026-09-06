@@ -15,7 +15,7 @@ def assign_random_characters(
     """
     pool = available_pool(all_character_ids, banned_ids)
     if len(pool) < 2:
-        raise ValueError("not enough characters left after bans to assign two players")
+        raise ValueError("После банов не осталось персонажей, чтобы раздать обоим игрокам.")
 
     rng = rng or random.Random()
     chosen = rng.sample(pool, 2)

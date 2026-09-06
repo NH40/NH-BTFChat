@@ -28,7 +28,7 @@ async def create_tournament(
     slots: int = DEFAULT_BRACKET_SLOTS,
 ) -> Tournament:
     if slots < 2 or (slots & (slots - 1)) != 0:
-        raise ValueError("slots must be a power of two (2, 4, 8, 16, ...)")
+        raise ValueError("Число слотов должно быть степенью двойки (2, 4, 8, 16, …).")
 
     tournament = Tournament(
         name=name,
@@ -56,11 +56,11 @@ async def get_tournament(session: AsyncSession, tournament_id: int) -> Tournamen
 
 async def join_tournament(session: AsyncSession, tournament: Tournament, player_id: int) -> TournamentSignup:
     if tournament.status != STATUS_REGISTRATION:
-        raise ValueError("this tournament is not open for registration")
+        raise ValueError("Регистрация на этот турнир закрыта.")
     if any(s.player_id == player_id for s in tournament.signups):
-        raise ValueError("this player has already joined")
+        raise ValueError("Ты уже записан(а) на этот турнир.")
     if len(tournament.signups) >= tournament.slots:
-        raise ValueError("tournament is full")
+        raise ValueError("Турнир уже заполнен.")
 
     signup = TournamentSignup(tournament_id=tournament.id, player_id=player_id)
     session.add(signup)
@@ -78,11 +78,11 @@ async def start_bracket(
 ) -> list[Match]:
     """Randomly seeds round-1 pairings once the bracket is full."""
     if tournament.status != STATUS_REGISTRATION:
-        raise ValueError("tournament has already started")
+        raise ValueError("Турнир уже стартовал.")
     if not is_full(tournament):
-        raise ValueError("tournament is not full yet")
+        raise ValueError("Турнир ещё не заполнен.")
     if tournament.universe_id is None:
-        raise ValueError("tournament has no universe assigned")
+        raise ValueError("У турнира не задана вселенная.")
 
     rng = rng or random.Random()
     player_ids = [s.player_id for s in tournament.signups]
@@ -124,11 +124,11 @@ async def advance_round(
     """
     matches = await round_matches(session, tournament.id, round_number)
     if not matches:
-        raise ValueError(f"no matches found for round {round_number}")
+        raise ValueError(f"Не найдено матчей для раунда {round_number}.")
     if any(m.status != MATCH_STATUS_COMPLETED for m in matches):
-        raise ValueError("not all matches in this round are finished yet")
+        raise ValueError("Не все матчи этого раунда завершены.")
     if any(m.winner_id is None for m in matches):
-        raise ValueError("cannot advance a round that contains an undecided (drawn) match")
+        raise ValueError("Нельзя перейти к следующему раунду: в этом раунде есть ничья без победителя.")
 
     winners = [m.winner_id for m in matches]
 

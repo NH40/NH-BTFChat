@@ -94,7 +94,7 @@ async def cmd_next(message: Message, session: AsyncSession, command: CommandObje
     if announcement:
         await message.answer(announcement)
     else:
-        await message.answer(f"Матч #{match.id}: фаза «{match.status}».")
+        await message.answer(f"Матч #{match.id}: фаза «{texts.phase_name(match.status)}».")
 
     if match.status == match_service.STATUS_ROUND_1:
         p1, p2 = await _players(session, match)

@@ -80,6 +80,23 @@ ROUND_ANNOUNCE = {
     "judging": f"⚖️ <b>Судейство</b>\nСудьи, вносите баллы: /pb_score [id матча] (в личных сообщениях боту). "
     f"На вердикт даётся {VERDICT_MINUTES} мин.",
 }
+PHASE_RU = {
+    "ban_phase": "баны",
+    "prep": "подготовка",
+    "round_1": "Раунд 1 — Presentation",
+    "round_2": "Раунд 2 — Defense",
+    "round_3": "Раунд 3 — Attack",
+    "final_statement": "финальное слово",
+    "judging": "судейство",
+    "completed": "матч завершён",
+    "cancelled": "матч отменён",
+}
+
+
+def phase_name(status: str) -> str:
+    return PHASE_RU.get(status, status)
+
+
 TIME_UP_REMINDER = "⏰ Время фазы «{phase}» вышло! Организатор, переходи дальше: /pb_next {match_id}"
 
 JUDGES_NEED_MORE = f"Нужно назначить минимум {MIN_JUDGES_PER_MATCH} судей: /pb_judges_random {{match_id}}"

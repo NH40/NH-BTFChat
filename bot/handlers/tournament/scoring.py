@@ -17,9 +17,9 @@ router = Router(name="tournament_scoring")
 _CATEGORY_LABELS = {
     "evidence": "доказательная база",
     "argumentation": "аргументация",
-    "scaling": "scaling",
-    "defense": "защита (Round 2)",
-    "attack": "атака (Round 3)",
+    "scaling": "скейлинг (масштабирование сил)",
+    "defense": "защита (Раунд 2)",
+    "attack": "атака (Раунд 3)",
     "math": "математика/физика",
     "structure": "структура и подача",
 }

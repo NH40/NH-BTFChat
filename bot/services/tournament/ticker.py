@@ -30,7 +30,8 @@ async def _tick_once(bot: Bot) -> None:
         for match in due_matches:
             try:
                 await bot.send_message(
-                    match.chat_id, texts.TIME_UP_REMINDER.format(phase=match.status, match_id=match.id)
+                    match.chat_id,
+                    texts.TIME_UP_REMINDER.format(phase=texts.phase_name(match.status), match_id=match.id),
                 )
             except Exception:
                 logger.exception("Failed to send phase reminder for match %s", match.id)

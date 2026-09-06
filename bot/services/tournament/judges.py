@@ -13,7 +13,7 @@ def select_random_judges(
     """Randomly picks `count` distinct judges, excluding the match's own players."""
     pool = [jid for jid in eligible_judge_ids if jid not in excluded_ids]
     if len(pool) < count:
-        raise ValueError(f"not enough eligible judges: need {count}, have {len(pool)}")
+        raise ValueError(f"Недостаточно доступных судей: нужно {count}, есть {len(pool)}.")
 
     rng = rng or random.Random()
     return rng.sample(pool, count)
