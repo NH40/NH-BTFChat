@@ -47,7 +47,7 @@ async def cmd_tournament_new(
     parts = [p.strip() for p in raw.split("|")]
     if len(parts) < 2:
         await message.answer(
-            "Формат: /pb_tournament_new <название> | <вселенная> | [слотов, по умолчанию 8]"
+            "Формат: /pb_tournament_new [название] | [вселенная] | [слотов, по умолчанию 8]"
         )
         return
 
@@ -112,7 +112,7 @@ async def _do_join(session: AsyncSession, tournament_id: int, tg_user_id: int, d
 async def cmd_join_tournament(message: Message, session: AsyncSession, command: CommandObject) -> None:
     tournament_id = _parse_id(command.args)
     if tournament_id is None:
-        await message.answer("Формат: /pb_join_tournament <id турнира>")
+        await message.answer("Формат: /pb_join_tournament [id турнира]")
         return
 
     error, tournament = await _do_join(
@@ -173,7 +173,7 @@ async def cmd_tournament_start(
 ) -> None:
     tournament_id = _parse_id(command.args)
     if tournament_id is None:
-        await message.answer("Формат: /pb_tournament_start <id турнира>")
+        await message.answer("Формат: /pb_tournament_start [id турнира]")
         return
 
     tournament = await tournament_service.get_tournament(session, tournament_id)
@@ -197,7 +197,7 @@ async def cmd_tournament_advance(
 ) -> None:
     args = (command.args or "").split()
     if len(args) < 2:
-        await message.answer("Формат: /pb_tournament_advance <id турнира> <номер раунда>")
+        await message.answer("Формат: /pb_tournament_advance [id турнира] [номер раунда]")
         return
     try:
         tournament_id, round_number = int(args[0]), int(args[1])

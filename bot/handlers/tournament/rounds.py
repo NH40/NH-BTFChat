@@ -54,7 +54,7 @@ async def _do_assign_random_judges(session: AsyncSession, match_id: int) -> str:
 async def cmd_judges_random(message: Message, session: AsyncSession, command: CommandObject) -> None:
     match_id = _parse_match_id(command.args)
     if match_id is None:
-        await message.answer("Формат: /pb_judges_random <id матча>")
+        await message.answer("Формат: /pb_judges_random [id матча]")
         return
     await message.answer(await _do_assign_random_judges(session, match_id))
 
@@ -76,7 +76,7 @@ async def cb_judges_random_denied(callback: CallbackQuery) -> None:
 async def cmd_next(message: Message, session: AsyncSession, command: CommandObject) -> None:
     match_id = _parse_match_id(command.args)
     if match_id is None:
-        await message.answer("Формат: /pb_next <id матча>")
+        await message.answer("Формат: /pb_next [id матча]")
         return
 
     match = await match_service.get_match(session, match_id)

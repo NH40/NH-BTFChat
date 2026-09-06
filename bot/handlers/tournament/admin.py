@@ -71,7 +71,7 @@ async def cmd_admin_remove(message: Message, session: AsyncSession) -> None:
 async def cmd_universe_add(message: Message, session: AsyncSession, command: CommandObject) -> None:
     name = (command.args or "").strip()
     if not name:
-        await message.answer("Формат: /pb_universe_add <название>")
+        await message.answer("Формат: /pb_universe_add [название]")
         return
 
     existing = await universe_service.get_universe_by_name(session, name)
@@ -97,7 +97,7 @@ async def cmd_universes(message: Message, session: AsyncSession) -> None:
 async def cmd_char_add(message: Message, session: AsyncSession, command: CommandObject) -> None:
     raw = command.args or ""
     if "|" not in raw:
-        await message.answer("Формат: /pb_char_add <вселенная> | <персонаж>")
+        await message.answer("Формат: /pb_char_add [вселенная] | [персонаж]")
         return
 
     universe_name, char_name = (part.strip() for part in raw.split("|", 1))
@@ -114,7 +114,7 @@ async def cmd_char_add(message: Message, session: AsyncSession, command: Command
 async def cmd_char_remove(message: Message, session: AsyncSession, command: CommandObject) -> None:
     raw = command.args or ""
     if "|" not in raw:
-        await message.answer("Формат: /pb_char_remove <вселенная> | <персонаж>")
+        await message.answer("Формат: /pb_char_remove [вселенная] | [персонаж]")
         return
 
     universe_name, char_name = (part.strip() for part in raw.split("|", 1))
@@ -184,7 +184,7 @@ async def cmd_judges_list(message: Message, session: AsyncSession) -> None:
 async def cmd_season_new(message: Message, session: AsyncSession, command: CommandObject) -> None:
     name = (command.args or "").strip()
     if not name:
-        await message.answer("Формат: /pb_season_new <название>")
+        await message.answer("Формат: /pb_season_new [название]")
         return
     await season_service.start_season(session, name)
     await message.answer(texts.SEASON_STARTED.format(name=name))

@@ -73,7 +73,7 @@ async def cmd_score_start(
 ) -> None:
     match_id = _parse_match_id(command.args)
     if match_id is None:
-        await message.answer("Формат: /pb_score <id матча>")
+        await message.answer("Формат: /pb_score [id матча]")
         return
 
     match = await match_service.get_match(session, match_id)
@@ -175,7 +175,7 @@ async def cmd_finalize(
 ) -> None:
     match_id = _parse_match_id(command.args)
     if match_id is None:
-        await message.answer("Формат: /pb_finalize <id матча>")
+        await message.answer("Формат: /pb_finalize [id матча]")
         return
 
     match = await match_service.get_match(session, match_id)

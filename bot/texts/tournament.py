@@ -25,7 +25,7 @@ REPLY_REQUIRED = "Ответь этой командой на сообщение
 UNIVERSE_EXISTS = "Такая вселенная уже добавлена."
 UNIVERSE_ADDED = "✅ Вселенная «{name}» добавлена."
 UNIVERSE_NOT_FOUND = "Вселенная «{name}» не найдена. Проверь список: /pb_universes"
-NO_UNIVERSES = "Пока не добавлено ни одной вселенной. Добавь: /pb_universe_add <название>"
+NO_UNIVERSES = "Пока не добавлено ни одной вселенной. Добавь: /pb_universe_add [название]"
 
 CHARACTER_ADDED = "✅ Персонаж «{name}» добавлен во вселенную «{universe}»."
 CHARACTER_NOT_FOUND = "Персонаж «{name}» не найден в этой вселенной."
@@ -51,8 +51,8 @@ TOP_HEADER = "🏆 Топ игроков по Эло:\n"
 TOP_ROW = "{place}. {name} — {elo}"
 
 CHALLENGE_USAGE = (
-    "Формат: /pb_challenge <вселенная> — ответом на сообщение соперника, "
-    "или /pb_challenge <вселенная> @username"
+    "Формат: /pb_challenge [вселенная] — ответом на сообщение соперника, "
+    "или /pb_challenge [вселенная] @username"
 )
 CHALLENGE_SELF_ERROR = "Нельзя вызвать самого себя на бой."
 CHALLENGE_ANNOUNCE = (
@@ -66,7 +66,7 @@ BAN_ALREADY_DONE = "Ты уже использовал(а) все баны."
 BAN_ACCEPTED = "🚫 {player} банит: {character}"
 BANS_COMPLETE_ANNOUNCE = (
     "✅ Баны завершены. Персонажи розданы случайно из оставшегося пула:\n\n{p1} — {c1}\n{p2} — {c2}\n\n"
-    f"⏳ Подготовка: до {PREP_MAX_HOURS} часов. Организатор запускает раунды командой /pb_next <id>."
+    f"⏳ Подготовка: до {PREP_MAX_HOURS} часов. Организатор запускает раунды командой /pb_next [id]."
 )
 
 ROUND_ANNOUNCE = {
@@ -77,7 +77,7 @@ ROUND_ANNOUNCE = {
         f"🏁 <b>Финальное слово</b>\n{FINAL_STATEMENT_P1_MINUTES} мин. первому игроку, "
         f"{FINAL_STATEMENT_P2_MINUTES} мин. второму."
     ),
-    "judging": f"⚖️ <b>Судейство</b>\nСудьи, вносите баллы: /pb_score <id матча> (в личных сообщениях боту). "
+    "judging": f"⚖️ <b>Судейство</b>\nСудьи, вносите баллы: /pb_score [id матча] (в личных сообщениях боту). "
     f"На вердикт даётся {VERDICT_MINUTES} мин.",
 }
 TIME_UP_REMINDER = "⏰ Время фазы «{phase}» вышло! Организатор, переходи дальше: /pb_next {match_id}"
