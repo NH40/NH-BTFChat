@@ -9,23 +9,6 @@ from bot.db.models import (
     Subscription,
     TargetChat,
 )
-from bot.db.tournament_models import (
-    Character,
-    EloHistory,
-    Match,
-    MatchBan,
-    MatchJudge,
-    MatchPick,
-    MatchScore,
-    MatchVote,
-    PlayerProfile,
-    Season,
-    Tournament,
-    TournamentAdmin,
-    TournamentChat,
-    TournamentSignup,
-    Universe,
-)
 
 __all__ = [
     "Base",
@@ -38,19 +21,4 @@ __all__ = [
     "SourcePost",
     "PostCopy",
     "PendingAction",
-    "TournamentChat",
-    "TournamentAdmin",
-    "Season",
-    "PlayerProfile",
-    "EloHistory",
-    "Universe",
-    "Character",
-    "Tournament",
-    "TournamentSignup",
-    "Match",
-    "MatchBan",
-    "MatchPick",
-    "MatchJudge",
-    "MatchScore",
-    "MatchVote",
 ]

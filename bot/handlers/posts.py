@@ -75,6 +75,15 @@ async def on_channel_post(message: Message, session: AsyncSession, bot: Bot) -> 
 async def _send_single_copy(
     bot: Bot, message: Message, tg_chat_id: int, signature: str
 ) -> list[tuple[int, bool]]:
+    if message.content_type == ContentType.POLL:
+        # Polls can't be copied, so forward them straight from the community.
+        result = await bot.forward_message(
+            chat_id=tg_chat_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id,
+        )
+        return [(result.message_id, False)]
+
     if message.content_type == ContentType.TEXT:
         text = append_signature(message.html_text, signature, MAX_TEXT_LENGTH)
         result = await bot.send_message(chat_id=tg_chat_id, text=text, parse_mode=ParseMode.HTML)

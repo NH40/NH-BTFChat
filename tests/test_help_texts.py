@@ -8,7 +8,6 @@ import re
 import pytest
 
 from bot.texts import help as help_texts
-from bot.texts import tournament as tournament_texts
 
 _ALLOWED_TAG = re.compile(r"</?(b|i|u|s|a|code|pre|tg-spoiler|blockquote)(\s[^<>]*)?>")
 
@@ -36,7 +35,7 @@ def _collect_strings(module) -> list[tuple[str, str]]:
     return found
 
 
-@pytest.mark.parametrize("module", [help_texts, tournament_texts])
+@pytest.mark.parametrize("module", [help_texts])
 def test_no_stray_angle_brackets_in_texts(module):
     offenders = [
         name
