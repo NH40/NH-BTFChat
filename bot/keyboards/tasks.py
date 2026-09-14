@@ -1,7 +1,17 @@
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.constant import DEADLINE_PRESET_LABELS, REMINDER_LABELS, REMINDER_POLICIES
+from bot.constant import (
+    DEADLINE_PRESET_LABELS,
+    RECURRENCE_LABELS,
+    RECURRENCE_OPTIONS,
+    REMINDER_LABELS,
+    REMINDER_POLICIES,
+)
+
+
+def _short_label(title: str, limit: int = 40) -> str:
+    return title if len(title) <= limit else title[: limit - 1] + "…"
 
 
 def admin_tasks_menu_kb(admin_chats) -> InlineKeyboardMarkup:
@@ -59,6 +69,15 @@ def reminder_choice_kb() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def recurrence_choice_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for key in RECURRENCE_OPTIONS:
+        kb.button(text=RECURRENCE_LABELS[key], callback_data=f"task_recurrence:{key}")
+    kb.button(text="❌ Отмена", callback_data="cancel_new_task")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
 def task_card_kb(task_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Выполнено", callback_data=f"task_done:{task_id}")
@@ -67,11 +86,32 @@ def task_card_kb(task_id: int) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def task_resolved_kb(task_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔄 Вернуть в работу", callback_data=f"task_reopen:{task_id}")
+    return kb.as_markup()
+
+
 def open_tasks_list_kb(tasks, admin_chat_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for task in tasks:
-        label = task.title if len(task.title) <= 40 else task.title[:37] + "…"
-        kb.button(text=f"✅ {label}", callback_data=f"task_done:{task.id}")
+        kb.button(text=f"✅ {_short_label(task.title)}", callback_data=f"task_done:{task.id}")
     kb.button(text="◀️ Назад", callback_data=f"admin_chat:{admin_chat_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def mark_done_list_kb(tasks) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for task in tasks:
+        kb.button(text=f"✅ {_short_label(task.title)}", callback_data=f"task_done:{task.id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def history_list_kb(tasks) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for task in tasks:
+        kb.button(text=f"🔄 {_short_label(task.title)}", callback_data=f"task_reopen:{task.id}")
     kb.adjust(1)
     return kb.as_markup()

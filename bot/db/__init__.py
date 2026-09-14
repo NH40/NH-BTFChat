@@ -2,6 +2,7 @@ from bot.db.base import Base
 from bot.db.engine import async_session_maker, engine
 from bot.db.models import (
     AdminChat,
+    AdminRole,
     BotUser,
     Channel,
     PendingAction,
@@ -25,4 +26,5 @@ __all__ = [
     "PendingAction",
     "AdminChat",
     "Task",
+    "AdminRole",
 ]

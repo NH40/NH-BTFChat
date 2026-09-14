@@ -24,3 +24,16 @@ REMINDER_LABELS: dict[str, str] = {
 
 TASK_REMINDER_POLL_SECONDS = 10 * 60
 TASK_REMINDER_NAG_INTERVAL = dt.timedelta(hours=24)
+
+RECURRENCE_OPTIONS = ("none", "daily", "weekly")
+RECURRENCE_LABELS: dict[str, str] = {
+    "none": "Не повторять",
+    "daily": "🔁 Повтор: каждый день",
+    "weekly": "🔁 Повтор: каждую неделю",
+}
+RECURRENCE_PERIODS: dict[str, dt.timedelta] = {
+    "daily": dt.timedelta(days=1),
+    "weekly": dt.timedelta(weeks=1),
+}
+
+MAX_ROLE_LENGTH = 2048

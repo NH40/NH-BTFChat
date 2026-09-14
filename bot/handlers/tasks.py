@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.constant import CANCEL_WORDS, DEADLINE_PRESETS, MAX_TASK_TITLE_LENGTH
+from bot.constant import CANCEL_WORDS, DEADLINE_PRESETS, MAX_ROLE_LENGTH, MAX_TASK_TITLE_LENGTH
 from bot.filters import IsPrivateChat
 from bot.keyboards import (
     admin_chat_menu_kb,
@@ -17,11 +17,16 @@ from bot.keyboards import (
     back_to_menu_kb,
     cancel_new_task_kb,
     deadline_choice_kb,
+    history_list_kb,
+    mark_done_list_kb,
     open_tasks_list_kb,
+    recurrence_choice_kb,
     reminder_choice_kb,
     task_card_kb,
+    task_resolved_kb,
 )
 from bot.services import admin_chats as admin_chat_service
+from bot.services import admin_roles as admin_role_service
 from bot.services import pending as pending_service
 from bot.services import tasks as task_service
 from bot.services import users as user_service
@@ -30,6 +35,15 @@ from bot.texts import tasks as texts
 from bot.utils import parse_deadline_input, safe_edit
 
 router = Router(name="tasks")
+
+
+def _display_name(user) -> str:
+    return user.full_name or (f"@{user.username}" if user.username else str(user.id))
+
+
+async def _chat_admins(bot: Bot, tg_chat_id: int) -> list[tuple[int, str]]:
+    members = await bot.get_chat_administrators(tg_chat_id)
+    return [(m.user.id, _display_name(m.user)) for m in members if not m.user.is_bot]
 
 
 async def _render_admin_tasks_menu(session: AsyncSession, tg_user_id: int) -> tuple[str, object]:
@@ -113,6 +127,12 @@ async def cb_admin_chat_tasks(callback: CallbackQuery, session: AsyncSession) ->
     await callback.answer()
 
 
+# ---------------------------------------------------------------------------
+# Owner wizard: full task with assignee, free-text title, deadline, reminder
+# policy and recurrence. Always started from the private chat menu.
+# ---------------------------------------------------------------------------
+
+
 @router.callback_query(F.data.startswith("new_task:"))
 async def cb_new_task_start(
     callback: CallbackQuery, session: AsyncSession, bot: Bot, state: FSMContext
@@ -122,17 +142,12 @@ async def cb_new_task_start(
     if not admin_chat:
         return
 
-    members = await bot.get_chat_administrators(admin_chat.tg_chat_id)
-    admins = [
-        (m.user.id, m.user.full_name or (f"@{m.user.username}" if m.user.username else str(m.user.id)))
-        for m in members
-        if not m.user.is_bot
-    ]
+    admins = await _chat_admins(bot, admin_chat.tg_chat_id)
     if not admins:
         await callback.answer(texts.NO_ADMINS_FOUND, show_alert=True)
         return
 
-    await state.update_data(admin_chat_id=admin_chat_id, admins=dict(admins))
+    await state.update_data(admin_chat_id=admin_chat_id, admins=dict(admins), kind="task")
     await safe_edit(callback.message, texts.CHOOSE_ASSIGNEE_TEXT, reply_markup=assignee_choice_kb(admins))
     await callback.answer()
 
@@ -144,17 +159,16 @@ async def cb_task_assignee(callback: CallbackQuery, state: FSMContext) -> None:
     if "admin_chat_id" not in data:
         await callback.answer()
         return
-    assignee_name = data.get("admins", {}).get(assignee_tg_id) or data.get("admins", {}).get(
-        str(assignee_tg_id), "админ"
-    )
+    admins = data.get("admins", {})
+    assignee_name = admins.get(assignee_tg_id) or admins.get(str(assignee_tg_id), "админ")
     await state.update_data(assignee_tg_id=assignee_tg_id, assignee_name=assignee_name)
     await state.set_state(NewTask.waiting_title)
     await safe_edit(callback.message, texts.ASK_TASK_TITLE_TEXT, reply_markup=cancel_new_task_kb())
     await callback.answer()
 
 
-@router.message(NewTask.waiting_title, IsPrivateChat())
-async def process_task_title(message: Message, state: FSMContext) -> None:
+@router.message(NewTask.waiting_title)
+async def process_task_title(message: Message, state: FSMContext, session: AsyncSession, bot: Bot) -> None:
     raw_text = (message.text or "").strip()
     if raw_text.lower() in CANCEL_WORDS:
         await state.clear()
@@ -166,6 +180,15 @@ async def process_task_title(message: Message, state: FSMContext) -> None:
 
     title = raw_text[:MAX_TASK_TITLE_LENGTH]
     await state.update_data(title=title)
+    data = await state.get_data()
+
+    if data.get("kind") == "order":
+        # Orders are ad-hoc requests: no deadline/reminder/recurrence wizard.
+        await state.update_data(deadline=None, recurrence="none")
+        await state.set_state(None)
+        await _finalize_task(message, session, bot, state, message.from_user.id, "none")
+        return
+
     await state.set_state(None)
     await message.answer(texts.ASK_DEADLINE_TEXT, reply_markup=deadline_choice_kb())
 
@@ -186,6 +209,7 @@ async def cb_task_deadline(callback: CallbackQuery, session: AsyncSession, state
 
     if key == "none":
         await callback.answer()
+        await state.update_data(deadline=None, recurrence="none")
         await _finalize_task(callback.message, session, bot, state, callback.from_user.id, "none")
         return
 
@@ -219,10 +243,29 @@ async def process_custom_deadline(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("task_reminder:"))
-async def cb_task_reminder(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
+async def cb_task_reminder(callback: CallbackQuery, state: FSMContext) -> None:
     reminder_policy = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    if "title" not in data:
+        await callback.answer()
+        return
+    await state.update_data(reminder_policy=reminder_policy)
+    await safe_edit(callback.message, texts.ASK_RECURRENCE_TEXT, reply_markup=recurrence_choice_kb())
     await callback.answer()
-    await _finalize_task(callback.message, session, bot, state, callback.from_user.id, reminder_policy)
+
+
+@router.callback_query(F.data.startswith("task_recurrence:"))
+async def cb_task_recurrence(callback: CallbackQuery, session: AsyncSession, state: FSMContext, bot: Bot) -> None:
+    recurrence = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    if "title" not in data:
+        await callback.answer()
+        return
+    await callback.answer()
+    await state.update_data(recurrence=recurrence)
+    await _finalize_task(
+        callback.message, session, bot, state, callback.from_user.id, data.get("reminder_policy", "none")
+    )
 
 
 async def _finalize_task(
@@ -230,7 +273,7 @@ async def _finalize_task(
     session: AsyncSession,
     bot: Bot,
     state: FSMContext,
-    owner_tg_id: int,
+    creator_tg_id: int,
     reminder_policy: str,
 ) -> None:
     data = await state.get_data()
@@ -246,16 +289,27 @@ async def _finalize_task(
 
     deadline_raw = data.get("deadline")
     deadline = dt.datetime.fromisoformat(deadline_raw) if deadline_raw else None
+    kind = data.get("kind", "task")
+
+    creator_name = None
+    try:
+        creator_member = await bot.get_chat_member(admin_chat.tg_chat_id, creator_tg_id)
+        creator_name = _display_name(creator_member.user)
+    except Exception:
+        pass
 
     task = await task_service.create_task(
         session,
         admin_chat_id=admin_chat_id,
-        created_by_tg_id=owner_tg_id,
+        created_by_tg_id=creator_tg_id,
+        created_by_name=creator_name,
         assignee_tg_id=data["assignee_tg_id"],
         assignee_name=data.get("assignee_name"),
         title=data["title"],
         deadline=deadline,
         reminder_policy=reminder_policy,
+        recurrence=data.get("recurrence", "none"),
+        kind=kind,
     )
 
     sent = await bot.send_message(
@@ -264,7 +318,12 @@ async def _finalize_task(
     await task_service.set_task_message(session, task.id, sent.message_id)
     await state.clear()
 
-    await safe_edit(message, texts.TASK_CREATED_OWNER, reply_markup=admin_chat_menu_kb(admin_chat.id))
+    confirm_text = texts.ORDER_CREATED_TEXT if kind == "order" else texts.TASK_CREATED_OWNER
+    if message.chat.id == admin_chat.tg_chat_id:
+        # Order flow: the wizard ran inline in the group chat itself.
+        await message.answer(confirm_text)
+    else:
+        await safe_edit(message, confirm_text, reply_markup=admin_chat_menu_kb(admin_chat.id))
 
 
 @router.callback_query(F.data == "cancel_new_task")
@@ -272,6 +331,130 @@ async def cb_cancel_new_task(callback: CallbackQuery, state: FSMContext) -> None
     await state.clear()
     await safe_edit(callback.message, texts.NEW_TASK_CANCELLED, reply_markup=back_to_menu_kb())
     await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Orders: any chat member can request a task from a specific assignee.
+# ---------------------------------------------------------------------------
+
+
+@router.message(Command("order"))
+async def cmd_order(message: Message, session: AsyncSession, bot: Bot, state: FSMContext) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+
+    admins = await _chat_admins(bot, admin_chat.tg_chat_id)
+    if not admins:
+        await message.reply(texts.NO_ADMINS_FOUND)
+        return
+
+    await state.update_data(admin_chat_id=admin_chat.id, admins=dict(admins), kind="order")
+    await message.reply(texts.CHOOSE_ASSIGNEE_TEXT, reply_markup=assignee_choice_kb(admins))
+
+
+@router.message(Command("orders"))
+async def cmd_orders(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+
+    orders = await task_service.list_open_tasks(session, admin_chat.id, kind="order")
+    if not orders:
+        await message.answer(texts.NO_OPEN_ORDERS_TEXT)
+        return
+    lines = [texts.OPEN_ORDERS_LIST_TEXT, ""]
+    lines.extend(texts.open_task_list_item(task) for task in orders)
+    await message.answer("\n".join(lines), reply_markup=mark_done_list_kb(orders))
+
+
+# ---------------------------------------------------------------------------
+# Personal views and history.
+# ---------------------------------------------------------------------------
+
+
+@router.message(Command("mytasks"))
+async def cmd_mytasks(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+
+    my_tasks = await task_service.list_open_tasks_for_assignee(session, admin_chat.id, message.from_user.id)
+    if not my_tasks:
+        await message.answer(texts.NO_MY_TASKS_TEXT)
+        return
+    lines = [texts.MY_TASKS_LIST_TEXT, ""]
+    lines.extend(texts.open_task_list_item(task) for task in my_tasks)
+    await message.answer("\n".join(lines), reply_markup=mark_done_list_kb(my_tasks))
+
+
+@router.message(Command("done"))
+async def cmd_history(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+
+    resolved = await task_service.list_recent_resolved(session, admin_chat.id)
+    if not resolved:
+        await message.answer(texts.NO_HISTORY_TEXT)
+        return
+    lines = [texts.HISTORY_LIST_TEXT, ""]
+    lines.extend(texts.history_list_item(task) for task in resolved)
+    await message.answer("\n".join(lines), reply_markup=history_list_kb(resolved))
+
+
+# ---------------------------------------------------------------------------
+# Responsibilities (persistent role description per admin).
+# ---------------------------------------------------------------------------
+
+
+@router.message(Command("role"))
+async def cmd_role(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+    role = await admin_role_service.get_role(session, admin_chat.id, message.from_user.id)
+    await message.reply(texts.role_text(role.description if role else None))
+
+
+@router.message(Command("setrole"))
+async def cmd_setrole(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+    if admin_chat.owner.tg_user_id != message.from_user.id:
+        await message.reply(texts.NOT_ALLOWED_SETROLE)
+        return
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        await message.reply(texts.SETROLE_NEEDS_REPLY_TEXT)
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.reply(texts.SETROLE_USAGE_TEXT)
+        return
+
+    target = message.reply_to_message.from_user
+    description = parts[1].strip()[:MAX_ROLE_LENGTH]
+    await admin_role_service.set_role(session, admin_chat.id, target.id, description)
+    await message.reply(texts.role_set_answer(_display_name(target)))
+
+
+# ---------------------------------------------------------------------------
+# Task/order resolution: done, cancel, reopen.
+# ---------------------------------------------------------------------------
 
 
 @router.callback_query(F.data.startswith("task_done:"))
@@ -301,23 +484,32 @@ async def _resolve_task(callback: CallbackQuery, session: AsyncSession, bot: Bot
             return
         if task.status == "open":
             task = await task_service.mark_done(session, task_id)
-        suffix = texts.task_done_suffix()
-        answer_text = texts.TASK_DONE_ANSWER
+        if task.status == "open":
+            # Recurring task: rolled forward to the next cycle instead of closing.
+            answer_text = texts.TASK_RECURRED_ANSWER
+            card_text = texts.task_card_text(task)
+            card_kb = task_card_kb(task.id)
+        else:
+            answer_text = texts.TASK_DONE_ANSWER
+            card_text = texts.task_card_text(task) + texts.task_done_suffix()
+            card_kb = task_resolved_kb(task.id)
     else:
         if not is_owner:
             await callback.answer(texts.NOT_ALLOWED_CANCEL, show_alert=True)
             return
         if task.status == "open":
             task = await task_service.cancel_task(session, task_id)
-        suffix = texts.task_cancelled_suffix()
         answer_text = texts.TASK_CANCEL_ANSWER
+        card_text = texts.task_card_text(task) + texts.task_cancelled_suffix()
+        card_kb = task_resolved_kb(task.id)
 
     if admin_chat and task.chat_message_id:
         try:
             await bot.edit_message_text(
                 chat_id=admin_chat.tg_chat_id,
                 message_id=task.chat_message_id,
-                text=texts.task_card_text(task) + suffix,
+                text=card_text,
+                reply_markup=card_kb,
             )
         except Exception:
             pass
@@ -327,6 +519,37 @@ async def _resolve_task(callback: CallbackQuery, session: AsyncSession, bot: Bot
         await safe_edit(callback.message, text, reply_markup=kb)
 
     await callback.answer(answer_text)
+
+
+@router.callback_query(F.data.startswith("task_reopen:"))
+async def cb_task_reopen(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
+    task_id = int(callback.data.split(":")[1])
+    task = await task_service.get_task(session, task_id)
+    if not task:
+        await callback.answer("Задача не найдена.", show_alert=True)
+        return
+
+    admin_chat = task.admin_chat
+    is_owner = admin_chat is not None and admin_chat.owner.tg_user_id == callback.from_user.id
+    is_assignee = task.assignee_tg_id == callback.from_user.id
+    if not (is_owner or is_assignee):
+        await callback.answer(texts.NOT_ALLOWED_DONE, show_alert=True)
+        return
+
+    task = await task_service.reopen_task(session, task_id)
+
+    if admin_chat and task.chat_message_id:
+        try:
+            await bot.edit_message_text(
+                chat_id=admin_chat.tg_chat_id,
+                message_id=task.chat_message_id,
+                text=texts.task_card_text(task),
+                reply_markup=task_card_kb(task.id),
+            )
+        except Exception:
+            pass
+
+    await callback.answer(texts.TASK_REOPEN_ANSWER)
 
 
 @router.message(Command("tasks"))
