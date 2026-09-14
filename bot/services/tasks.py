@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from bot.constant import RECURRENCE_PERIODS
 from bot.db import AdminChat, Task
+from bot.services import task_events as task_event_service
 
 
 async def create_task(
@@ -85,11 +86,20 @@ async def list_open_tasks_for_assignee(
 async def list_recent_resolved(session: AsyncSession, admin_chat_id: int, limit: int = 15) -> list[Task]:
     result = await session.execute(
         select(Task)
-        .where(Task.admin_chat_id == admin_chat_id, Task.status.in_(("done", "cancelled")))
+        .where(Task.admin_chat_id == admin_chat_id, Task.status.in_(("done", "missed", "cancelled")))
         .order_by(Task.completed_at.desc())
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+def _roll_forward(task: Task, now: dt.datetime) -> None:
+    task.completed_at = now
+    task.deadline = now + RECURRENCE_PERIODS[task.recurrence]
+    task.pre_reminder_sent = False
+    task.deadline_notified = False
+    task.last_reminded_at = None
+    task.status = "open"
 
 
 async def mark_done(session: AsyncSession, task_id: int) -> Task | None:
@@ -97,21 +107,58 @@ async def mark_done(session: AsyncSession, task_id: int) -> Task | None:
     if not task:
         return None
     now = dt.datetime.utcnow()
+    on_time = task.deadline is None or now <= task.deadline
+    original_deadline = task.deadline
 
     if task.recurrence != "none" and task.deadline is not None:
         # Recurring task: log this cycle's completion and roll forward instead of closing it.
-        task.completed_at = now
-        task.deadline = now + RECURRENCE_PERIODS[task.recurrence]
-        task.pre_reminder_sent = False
-        task.deadline_notified = False
-        task.last_reminded_at = None
-        task.status = "open"
+        _roll_forward(task, now)
     else:
         task.status = "done"
         task.completed_at = now
 
     await session.commit()
     await session.refresh(task)
+
+    await task_event_service.log_event(
+        session,
+        admin_chat_id=task.admin_chat_id,
+        task_id=task.id,
+        assignee_tg_id=task.assignee_tg_id,
+        assignee_name=task.assignee_name,
+        event="done",
+        on_time=on_time,
+        deadline=original_deadline,
+    )
+    return task
+
+
+async def mark_missed(session: AsyncSession, task_id: int) -> Task | None:
+    task = await session.get(Task, task_id)
+    if not task:
+        return None
+    now = dt.datetime.utcnow()
+    original_deadline = task.deadline
+
+    if task.recurrence != "none" and task.deadline is not None:
+        _roll_forward(task, now)
+    else:
+        task.status = "missed"
+        task.completed_at = now
+
+    await session.commit()
+    await session.refresh(task)
+
+    await task_event_service.log_event(
+        session,
+        admin_chat_id=task.admin_chat_id,
+        task_id=task.id,
+        assignee_tg_id=task.assignee_tg_id,
+        assignee_name=task.assignee_name,
+        event="missed",
+        on_time=False,
+        deadline=original_deadline,
+    )
     return task
 
 
@@ -137,6 +184,7 @@ async def reopen_task(session: AsyncSession, task_id: int) -> Task | None:
     task.last_reminded_at = None
     await session.commit()
     await session.refresh(task)
+    await task_event_service.delete_latest_event_for_task(session, task_id)
     return task
 
 

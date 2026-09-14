@@ -45,3 +45,22 @@ def parse_deadline_input(text: str, now: dt.datetime | None = None) -> dt.dateti
 def format_deadline(deadline: dt.datetime) -> str:
     local = deadline + MSK_OFFSET
     return local.strftime("%d.%m.%Y %H:%M") + " МСК"
+
+
+def relative_label(moment: dt.datetime, now: dt.datetime | None = None) -> str:
+    """Short relative offset like 'через 3 ч' / 'просрочено на 2 дн'."""
+    now = now or dt.datetime.utcnow()
+    total_minutes = int((moment - now).total_seconds() // 60)
+    overdue = total_minutes < 0
+    minutes = abs(total_minutes)
+
+    if minutes < 60:
+        value, unit = minutes, "мин"
+    elif minutes < 60 * 24:
+        value, unit = minutes // 60, "ч"
+    else:
+        value, unit = minutes // (60 * 24), "дн"
+
+    if value == 0:
+        return "прямо сейчас"
+    return f"просрочено на {value} {unit}" if overdue else f"через {value} {unit}"

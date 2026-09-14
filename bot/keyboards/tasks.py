@@ -10,7 +10,7 @@ from bot.constant import (
 )
 
 
-def _short_label(title: str, limit: int = 40) -> str:
+def _short_label(title: str, limit: int = 32) -> str:
     return title if len(title) <= limit else title[: limit - 1] + "…"
 
 
@@ -81,6 +81,7 @@ def recurrence_choice_kb() -> InlineKeyboardMarkup:
 def task_card_kb(task_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Выполнено", callback_data=f"task_done:{task_id}")
+    kb.button(text="❌ Не выполнено", callback_data=f"task_missed:{task_id}")
     kb.button(text="🗑 Отменить", callback_data=f"task_cancel:{task_id}")
     kb.adjust(1)
     return kb.as_markup()
@@ -94,24 +95,24 @@ def task_resolved_kb(task_id: int) -> InlineKeyboardMarkup:
 
 def open_tasks_list_kb(tasks, admin_chat_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for task in tasks:
-        kb.button(text=f"✅ {_short_label(task.title)}", callback_data=f"task_done:{task.id}")
+    for index, task in enumerate(tasks, start=1):
+        kb.button(text=f"🔎 {index}. {_short_label(task.title)}", callback_data=f"task_view:{task.id}")
     kb.button(text="◀️ Назад", callback_data=f"admin_chat:{admin_chat_id}")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def mark_done_list_kb(tasks) -> InlineKeyboardMarkup:
+def task_picker_kb(tasks) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for task in tasks:
-        kb.button(text=f"✅ {_short_label(task.title)}", callback_data=f"task_done:{task.id}")
+    for index, task in enumerate(tasks, start=1):
+        kb.button(text=f"🔎 {index}. {_short_label(task.title)}", callback_data=f"task_view:{task.id}")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def history_list_kb(tasks) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for task in tasks:
-        kb.button(text=f"🔄 {_short_label(task.title)}", callback_data=f"task_reopen:{task.id}")
+    for index, task in enumerate(tasks, start=1):
+        kb.button(text=f"🔄 {index}. {_short_label(task.title)}", callback_data=f"task_reopen:{task.id}")
     kb.adjust(1)
     return kb.as_markup()

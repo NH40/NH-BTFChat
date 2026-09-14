@@ -11,6 +11,7 @@ from bot.db.models import (
     Subscription,
     TargetChat,
     Task,
+    TaskEvent,
 )
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "PendingAction",
     "AdminChat",
     "Task",
+    "TaskEvent",
     "AdminRole",
 ]

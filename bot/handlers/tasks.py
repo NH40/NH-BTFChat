@@ -18,16 +18,17 @@ from bot.keyboards import (
     cancel_new_task_kb,
     deadline_choice_kb,
     history_list_kb,
-    mark_done_list_kb,
     open_tasks_list_kb,
     recurrence_choice_kb,
     reminder_choice_kb,
     task_card_kb,
+    task_picker_kb,
     task_resolved_kb,
 )
 from bot.services import admin_chats as admin_chat_service
 from bot.services import admin_roles as admin_role_service
 from bot.services import pending as pending_service
+from bot.services import task_events as task_event_service
 from bot.services import tasks as task_service
 from bot.services import users as user_service
 from bot.states import NewTask
@@ -112,7 +113,7 @@ async def _render_open_tasks(session: AsyncSession, admin_chat_id: int) -> tuple
     if not open_tasks:
         return texts.NO_OPEN_TASKS_TEXT, admin_chat_menu_kb(admin_chat_id)
     lines = [texts.OPEN_TASKS_LIST_TEXT, ""]
-    lines.extend(texts.open_task_list_item(task) for task in open_tasks)
+    lines.extend(texts.open_task_list_item(i, task) for i, task in enumerate(open_tasks, start=1))
     return "\n".join(lines), open_tasks_list_kb(open_tasks, admin_chat_id)
 
 
@@ -368,8 +369,8 @@ async def cmd_orders(message: Message, session: AsyncSession) -> None:
         await message.answer(texts.NO_OPEN_ORDERS_TEXT)
         return
     lines = [texts.OPEN_ORDERS_LIST_TEXT, ""]
-    lines.extend(texts.open_task_list_item(task) for task in orders)
-    await message.answer("\n".join(lines), reply_markup=mark_done_list_kb(orders))
+    lines.extend(texts.open_task_list_item(i, task) for i, task in enumerate(orders, start=1))
+    await message.answer("\n".join(lines), reply_markup=task_picker_kb(orders))
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +388,8 @@ async def _reply_my_tasks(message: Message, session: AsyncSession) -> None:
         await message.answer(texts.NO_MY_TASKS_TEXT)
         return
     lines = [texts.MY_TASKS_LIST_TEXT, ""]
-    lines.extend(texts.open_task_list_item(task) for task in my_tasks)
-    await message.answer("\n".join(lines), reply_markup=mark_done_list_kb(my_tasks))
+    lines.extend(texts.my_task_list_item(i, task) for i, task in enumerate(my_tasks, start=1))
+    await message.answer("\n".join(lines), reply_markup=task_picker_kb(my_tasks))
 
 
 @router.message(Command("tasks", "mytasks"))
@@ -411,7 +412,7 @@ async def cmd_history(message: Message, session: AsyncSession) -> None:
         await message.answer(texts.NO_HISTORY_TEXT)
         return
     lines = [texts.HISTORY_LIST_TEXT, ""]
-    lines.extend(texts.history_list_item(task) for task in resolved)
+    lines.extend(texts.history_list_item(i, task) for i, task in enumerate(resolved, start=1))
     await message.answer("\n".join(lines), reply_markup=history_list_kb(resolved))
 
 
@@ -457,21 +458,56 @@ async def cmd_setrole(message: Message, session: AsyncSession) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task/order resolution: done, cancel, reopen.
+# Task/order detail view and resolution: view, done, missed, cancel, reopen.
 # ---------------------------------------------------------------------------
+
+
+@router.callback_query(F.data.startswith("task_view:"))
+async def cb_task_view(callback: CallbackQuery, session: AsyncSession) -> None:
+    task_id = int(callback.data.split(":")[1])
+    task = await task_service.get_task(session, task_id)
+    if not task:
+        await callback.answer("Задача не найдена.", show_alert=True)
+        return
+    kb = task_card_kb(task.id) if task.status == "open" else task_resolved_kb(task.id)
+    await callback.message.reply(texts.task_card_text(task), reply_markup=kb)
+    await callback.answer()
+
+
+async def _update_task_message(callback: CallbackQuery, bot: Bot, task, card_text: str, card_kb) -> None:
+    admin_chat = task.admin_chat
+    if admin_chat and task.chat_message_id and task.chat_message_id != callback.message.message_id:
+        try:
+            await bot.edit_message_text(
+                chat_id=admin_chat.tg_chat_id,
+                message_id=task.chat_message_id,
+                text=card_text,
+                reply_markup=card_kb,
+            )
+        except Exception:
+            pass
+    try:
+        await safe_edit(callback.message, card_text, reply_markup=card_kb)
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("task_done:"))
 async def cb_task_done(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
-    await _resolve_task(callback, session, bot, mark_done=True)
+    await _apply_task_action(callback, session, bot, action="done")
+
+
+@router.callback_query(F.data.startswith("task_missed:"))
+async def cb_task_missed(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
+    await _apply_task_action(callback, session, bot, action="missed")
 
 
 @router.callback_query(F.data.startswith("task_cancel:"))
 async def cb_task_cancel(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
-    await _resolve_task(callback, session, bot, mark_done=False)
+    await _apply_task_action(callback, session, bot, action="cancel")
 
 
-async def _resolve_task(callback: CallbackQuery, session: AsyncSession, bot: Bot, *, mark_done: bool) -> None:
+async def _apply_task_action(callback: CallbackQuery, session: AsyncSession, bot: Bot, *, action: str) -> None:
     task_id = int(callback.data.split(":")[1])
     task = await task_service.get_task(session, task_id)
     if not task:
@@ -482,46 +518,34 @@ async def _resolve_task(callback: CallbackQuery, session: AsyncSession, bot: Bot
     is_owner = admin_chat is not None and admin_chat.owner.tg_user_id == callback.from_user.id
     is_assignee = task.assignee_tg_id == callback.from_user.id
 
-    if mark_done:
-        if not (is_owner or is_assignee):
-            await callback.answer(texts.NOT_ALLOWED_DONE, show_alert=True)
-            return
-        if task.status == "open":
-            task = await task_service.mark_done(session, task_id)
-        if task.status == "open":
-            # Recurring task: rolled forward to the next cycle instead of closing.
-            answer_text = texts.TASK_RECURRED_ANSWER
-            card_text = texts.task_card_text(task)
-            card_kb = task_card_kb(task.id)
-        else:
-            answer_text = texts.TASK_DONE_ANSWER
-            card_text = texts.task_card_text(task) + texts.task_done_suffix()
-            card_kb = task_resolved_kb(task.id)
-    else:
+    if action == "cancel":
         if not is_owner:
             await callback.answer(texts.NOT_ALLOWED_CANCEL, show_alert=True)
             return
-        if task.status == "open":
+    elif not (is_owner or is_assignee):
+        await callback.answer(texts.NOT_ALLOWED_DONE, show_alert=True)
+        return
+
+    if task.status == "open":
+        if action == "done":
+            task = await task_service.mark_done(session, task_id)
+        elif action == "missed":
+            task = await task_service.mark_missed(session, task_id)
+        else:
             task = await task_service.cancel_task(session, task_id)
-        answer_text = texts.TASK_CANCEL_ANSWER
-        card_text = texts.task_card_text(task) + texts.task_cancelled_suffix()
-        card_kb = task_resolved_kb(task.id)
 
-    if admin_chat and task.chat_message_id:
-        try:
-            await bot.edit_message_text(
-                chat_id=admin_chat.tg_chat_id,
-                message_id=task.chat_message_id,
-                text=card_text,
-                reply_markup=card_kb,
-            )
-        except Exception:
-            pass
+    if task.status == "open":
+        # Recurring task rolled forward to the next cycle instead of closing.
+        answer_text = texts.TASK_RECURRED_ANSWER
+    else:
+        answer_text = {
+            "done": texts.TASK_DONE_ANSWER,
+            "missed": texts.TASK_MISSED_ANSWER,
+            "cancelled": texts.TASK_CANCEL_ANSWER,
+        }[task.status]
 
-    if admin_chat and callback.message.chat.id != admin_chat.tg_chat_id:
-        text, kb = await _render_open_tasks(session, admin_chat.id)
-        await safe_edit(callback.message, text, reply_markup=kb)
-
+    card_kb = task_card_kb(task.id) if task.status == "open" else task_resolved_kb(task.id)
+    await _update_task_message(callback, bot, task, texts.task_card_text(task), card_kb)
     await callback.answer(answer_text)
 
 
@@ -541,18 +565,7 @@ async def cb_task_reopen(callback: CallbackQuery, session: AsyncSession, bot: Bo
         return
 
     task = await task_service.reopen_task(session, task_id)
-
-    if admin_chat and task.chat_message_id:
-        try:
-            await bot.edit_message_text(
-                chat_id=admin_chat.tg_chat_id,
-                message_id=task.chat_message_id,
-                text=texts.task_card_text(task),
-                reply_markup=task_card_kb(task.id),
-            )
-        except Exception:
-            pass
-
+    await _update_task_message(callback, bot, task, texts.task_card_text(task), task_card_kb(task.id))
     await callback.answer(texts.TASK_REOPEN_ANSWER)
 
 
@@ -565,3 +578,23 @@ async def cmd_all_tasks(message: Message, session: AsyncSession) -> None:
         return
     text, kb = await _render_open_tasks(session, admin_chat.id)
     await message.answer(text, reply_markup=kb)
+
+
+# ---------------------------------------------------------------------------
+# Owner-only stats: who completed how much, and how much on time.
+# ---------------------------------------------------------------------------
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+    if admin_chat.owner.tg_user_id != message.from_user.id:
+        await message.reply(texts.NOT_ALLOWED_STATS)
+        return
+
+    rows = await task_event_service.get_stats(session, admin_chat.id)
+    await message.answer(texts.stats_text(rows))

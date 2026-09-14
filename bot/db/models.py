@@ -142,6 +142,20 @@ class Task(Base):
     admin_chat: Mapped["AdminChat"] = relationship(back_populates="tasks")
 
 
+class TaskEvent(Base):
+    __tablename__ = "task_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_chat_id: Mapped[int] = mapped_column(ForeignKey("admin_chats.id", ondelete="CASCADE"))
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"))
+    assignee_tg_id: Mapped[int] = mapped_column(BigInteger)
+    assignee_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event: Mapped[str] = mapped_column(String(16))
+    on_time: Mapped[bool | None] = mapped_column(nullable=True)
+    deadline: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+
+
 class AdminRole(Base):
     __tablename__ = "admin_roles"
     __table_args__ = (UniqueConstraint("admin_chat_id", "tg_user_id", name="uq_admin_role_user"),)

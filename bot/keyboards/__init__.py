@@ -14,11 +14,11 @@ from bot.keyboards.tasks import (
     cancel_new_task_kb,
     deadline_choice_kb,
     history_list_kb,
-    mark_done_list_kb,
     open_tasks_list_kb,
     recurrence_choice_kb,
     reminder_choice_kb,
     task_card_kb,
+    task_picker_kb,
     task_resolved_kb,
 )
 
@@ -41,6 +41,6 @@ __all__ = [
     "task_card_kb",
     "task_resolved_kb",
     "open_tasks_list_kb",
-    "mark_done_list_kb",
+    "task_picker_kb",
     "history_list_kb",
 ]
