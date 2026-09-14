@@ -6,6 +6,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить канал", callback_data="add_channel")
     kb.button(text="📋 Мои правила пересылки", callback_data="list_subs")
+    kb.button(text="🗂 Задачи админам", callback_data="admin_tasks_menu")
     kb.button(text="❓ Помощь", callback_data="help")
     kb.adjust(1)
     return kb.as_markup()

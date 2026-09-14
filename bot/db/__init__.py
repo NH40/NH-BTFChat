@@ -1,6 +1,7 @@
 from bot.db.base import Base
 from bot.db.engine import async_session_maker, engine
 from bot.db.models import (
+    AdminChat,
     BotUser,
     Channel,
     PendingAction,
@@ -8,6 +9,7 @@ from bot.db.models import (
     SourcePost,
     Subscription,
     TargetChat,
+    Task,
 )
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "SourcePost",
     "PostCopy",
     "PendingAction",
+    "AdminChat",
+    "Task",
 ]

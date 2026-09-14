@@ -18,6 +18,7 @@ class BotUser(Base):
 
     channels: Mapped[list["Channel"]] = relationship(back_populates="owner")
     target_chats: Mapped[list["TargetChat"]] = relationship(back_populates="owner")
+    admin_chats: Mapped[list["AdminChat"]] = relationship(back_populates="owner")
 
 
 class Channel(Base):
@@ -101,6 +102,41 @@ class PostCopy(Base):
     created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
 
     source_post: Mapped["SourcePost"] = relationship(back_populates="copies")
+
+
+class AdminChat(Base):
+    __tablename__ = "admin_chats"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tg_chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+
+    owner: Mapped["BotUser"] = relationship(back_populates="admin_chats")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="admin_chat", cascade="all, delete-orphan")
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_chat_id: Mapped[int] = mapped_column(ForeignKey("admin_chats.id", ondelete="CASCADE"))
+    created_by_tg_id: Mapped[int] = mapped_column(BigInteger)
+    assignee_tg_id: Mapped[int] = mapped_column(BigInteger)
+    assignee_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str] = mapped_column(String(1024))
+    deadline: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    reminder_policy: Mapped[str] = mapped_column(String(32), default="none")
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    chat_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    pre_reminder_sent: Mapped[bool] = mapped_column(default=False)
+    deadline_notified: Mapped[bool] = mapped_column(default=False)
+    last_reminded_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)
+    completed_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+
+    admin_chat: Mapped["AdminChat"] = relationship(back_populates="tasks")
 
 
 class PendingAction(Base):

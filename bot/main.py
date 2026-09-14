@@ -11,6 +11,7 @@ from bot.handlers import routers
 from bot.logging_setup import setup_logging
 from bot.middlewares import DbSessionMiddleware
 from bot.services.reconcile import run_reconciler
+from bot.services.task_reminders import run_task_reminders
 
 
 async def main() -> None:
@@ -25,10 +26,12 @@ async def main() -> None:
     await bot.delete_webhook(drop_pending_updates=True)
 
     reconciler_task = asyncio.create_task(run_reconciler(bot))
+    task_reminder_task = asyncio.create_task(run_task_reminders(bot))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         reconciler_task.cancel()
+        task_reminder_task.cancel()
 
 
 if __name__ == "__main__":

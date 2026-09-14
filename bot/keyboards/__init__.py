@@ -7,6 +7,16 @@ from bot.keyboards.menus import (
     subs_list_kb,
     target_chat_choice_kb,
 )
+from bot.keyboards.tasks import (
+    admin_chat_menu_kb,
+    admin_tasks_menu_kb,
+    assignee_choice_kb,
+    cancel_new_task_kb,
+    deadline_choice_kb,
+    open_tasks_list_kb,
+    reminder_choice_kb,
+    task_card_kb,
+)
 
 __all__ = [
     "main_menu_kb",
@@ -17,4 +27,12 @@ __all__ = [
     "subs_list_kb",
     "help_menu_kb",
     "help_section_kb",
+    "admin_tasks_menu_kb",
+    "admin_chat_menu_kb",
+    "cancel_new_task_kb",
+    "assignee_choice_kb",
+    "deadline_choice_kb",
+    "reminder_choice_kb",
+    "task_card_kb",
+    "open_tasks_list_kb",
 ]

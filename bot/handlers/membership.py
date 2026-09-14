@@ -2,18 +2,21 @@ from aiogram import Bot, Router
 from aiogram.types import ChatMemberUpdated
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards import back_to_menu_kb, target_chat_choice_kb
+from bot.keyboards import admin_chat_menu_kb, back_to_menu_kb, target_chat_choice_kb
+from bot.services import admin_chats as admin_chat_service
 from bot.services import channels as channel_service
 from bot.services import pending as pending_service
 from bot.services import subscriptions as sub_service
 from bot.services import users as user_service
 from bot.texts import membership as texts
+from bot.texts import tasks as task_texts
 from bot.texts.channels import offer_target_chat_prompt
 
 router = Router(name="membership")
 
 ADMIN_STATUSES = {"administrator", "creator"}
 ACTIVE_STATUSES = {"member", "administrator", "creator"}
+GROUP_PENDING_ACTIONS = {"awaiting_target_chat", "awaiting_admin_chat"}
 
 
 @router.my_chat_member()
@@ -68,10 +71,24 @@ async def handle_group_membership(update: ChatMemberUpdated, session: AsyncSessi
         return
 
     pending = await pending_service.get_pending(session, actor.id)
-    if not pending or pending.action != "awaiting_target_chat":
+    if not pending or pending.action not in GROUP_PENDING_ACTIONS:
         return
 
     user = await user_service.get_or_create_user(session, actor.id, actor.username)
+
+    if pending.action == "awaiting_admin_chat":
+        admin_chat = await admin_chat_service.upsert_admin_chat(
+            session, tg_chat_id=chat.id, title=chat.title or chat.username, owner_id=user.id
+        )
+        await pending_service.clear_pending(session, actor.id)
+        await bot.send_message(chat.id, task_texts.ADMIN_CHAT_CONNECTED_IN_CHAT)
+        await bot.send_message(
+            actor.id,
+            task_texts.ADMIN_CHAT_CONNECTED_OWNER,
+            reply_markup=admin_chat_menu_kb(admin_chat.id),
+        )
+        return
+
     target_chat = await sub_service.upsert_target_chat(
         session,
         tg_chat_id=chat.id,
