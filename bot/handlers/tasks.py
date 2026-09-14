@@ -377,10 +377,7 @@ async def cmd_orders(message: Message, session: AsyncSession) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.message(Command("mytasks"))
-async def cmd_mytasks(message: Message, session: AsyncSession) -> None:
-    if message.chat.type not in ("group", "supergroup"):
-        return
+async def _reply_my_tasks(message: Message, session: AsyncSession) -> None:
     admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
     if not admin_chat:
         return
@@ -392,6 +389,13 @@ async def cmd_mytasks(message: Message, session: AsyncSession) -> None:
     lines = [texts.MY_TASKS_LIST_TEXT, ""]
     lines.extend(texts.open_task_list_item(task) for task in my_tasks)
     await message.answer("\n".join(lines), reply_markup=mark_done_list_kb(my_tasks))
+
+
+@router.message(Command("tasks", "mytasks"))
+async def cmd_mytasks(message: Message, session: AsyncSession) -> None:
+    if message.chat.type not in ("group", "supergroup"):
+        return
+    await _reply_my_tasks(message, session)
 
 
 @router.message(Command("done"))
@@ -552,8 +556,8 @@ async def cb_task_reopen(callback: CallbackQuery, session: AsyncSession, bot: Bo
     await callback.answer(texts.TASK_REOPEN_ANSWER)
 
 
-@router.message(Command("tasks"))
-async def cmd_tasks(message: Message, session: AsyncSession) -> None:
+@router.message(Command("alltasks"))
+async def cmd_all_tasks(message: Message, session: AsyncSession) -> None:
     if message.chat.type not in ("group", "supergroup"):
         return
     admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
