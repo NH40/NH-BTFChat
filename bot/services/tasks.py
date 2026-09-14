@@ -94,8 +94,15 @@ async def list_recent_resolved(session: AsyncSession, admin_chat_id: int, limit:
 
 
 def _roll_forward(task: Task, now: dt.datetime) -> None:
+    # Anchor to the previous deadline (not "now") so a daily/weekly task keeps a
+    # stable time-of-day instead of drifting to whenever it happened to be marked.
+    period = RECURRENCE_PERIODS[task.recurrence]
+    next_deadline = task.deadline + period
+    while next_deadline <= now:
+        next_deadline += period
+
     task.completed_at = now
-    task.deadline = now + RECURRENCE_PERIODS[task.recurrence]
+    task.deadline = next_deadline
     task.pre_reminder_sent = False
     task.deadline_notified = False
     task.last_reminded_at = None

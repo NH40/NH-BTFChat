@@ -78,34 +78,53 @@ def recurrence_choice_kb() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def task_card_kb(task_id: int) -> InlineKeyboardMarkup:
+def _task_cb(action: str, task_id: int, origin: str | None, admin_chat_id: int | None) -> str:
+    return f"{action}:{task_id}:{origin or '-'}:{admin_chat_id or 0}"
+
+
+def task_card_kb(
+    task_id: int, origin: str | None = None, admin_chat_id: int | None = None
+) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Выполнено", callback_data=f"task_done:{task_id}")
-    kb.button(text="❌ Не выполнено", callback_data=f"task_missed:{task_id}")
-    kb.button(text="🗑 Отменить", callback_data=f"task_cancel:{task_id}")
+    kb.button(text="✅ Выполнено", callback_data=_task_cb("task_done", task_id, origin, admin_chat_id))
+    kb.button(text="❌ Не выполнено", callback_data=_task_cb("task_missed", task_id, origin, admin_chat_id))
+    kb.button(text="🗑 Отменить", callback_data=_task_cb("task_cancel", task_id, origin, admin_chat_id))
+    if origin:
+        kb.button(text="◀️ К списку", callback_data=f"task_back:{origin}:{admin_chat_id or 0}")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def task_resolved_kb(task_id: int) -> InlineKeyboardMarkup:
+def task_resolved_kb(
+    task_id: int, origin: str | None = None, admin_chat_id: int | None = None
+) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔄 Вернуть в работу", callback_data=f"task_reopen:{task_id}")
+    kb.button(text="🔄 Вернуть в работу", callback_data=_task_cb("task_reopen", task_id, origin, admin_chat_id))
+    if origin:
+        kb.button(text="◀️ К списку", callback_data=f"task_back:{origin}:{admin_chat_id or 0}")
+    kb.adjust(1)
     return kb.as_markup()
 
 
 def open_tasks_list_kb(tasks, admin_chat_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for index, task in enumerate(tasks, start=1):
-        kb.button(text=f"🔎 {index}. {_short_label(task.title)}", callback_data=f"task_view:{task.id}")
+        kb.button(
+            text=f"🔎 {index}. {_short_label(task.title)}",
+            callback_data=f"task_view:{task.id}:all:{admin_chat_id}",
+        )
     kb.button(text="◀️ Назад", callback_data=f"admin_chat:{admin_chat_id}")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def task_picker_kb(tasks) -> InlineKeyboardMarkup:
+def task_picker_kb(tasks, admin_chat_id: int, origin: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for index, task in enumerate(tasks, start=1):
-        kb.button(text=f"🔎 {index}. {_short_label(task.title)}", callback_data=f"task_view:{task.id}")
+        kb.button(
+            text=f"🔎 {index}. {_short_label(task.title)}",
+            callback_data=f"task_view:{task.id}:{origin}:{admin_chat_id}",
+        )
     kb.adjust(1)
     return kb.as_markup()
 

@@ -42,6 +42,15 @@ def _display_name(user) -> str:
     return user.full_name or (f"@{user.username}" if user.username else str(user.id))
 
 
+def _parse_task_cb(data: str) -> tuple[int, str | None, int | None]:
+    """Parses "{action}:{task_id}:{origin}:{admin_chat_id}", origin/admin_chat_id optional."""
+    parts = data.split(":")
+    task_id = int(parts[1])
+    origin = parts[2] if len(parts) > 2 and parts[2] != "-" else None
+    admin_chat_id = int(parts[3]) if len(parts) > 3 and parts[3] not in ("0", "") else None
+    return task_id, origin, admin_chat_id
+
+
 async def _chat_admins(bot: Bot, tg_chat_id: int) -> list[tuple[int, str]]:
     members = await bot.get_chat_administrators(tg_chat_id)
     return [(m.user.id, _display_name(m.user)) for m in members if not m.user.is_bot]
@@ -356,6 +365,15 @@ async def cmd_order(message: Message, session: AsyncSession, bot: Bot, state: FS
     await message.reply(texts.CHOOSE_ASSIGNEE_TEXT, reply_markup=assignee_choice_kb(admins))
 
 
+async def _render_orders(session: AsyncSession, admin_chat_id: int) -> tuple[str, object]:
+    orders = await task_service.list_open_tasks(session, admin_chat_id, kind="order")
+    if not orders:
+        return texts.NO_OPEN_ORDERS_TEXT, None
+    lines = [texts.OPEN_ORDERS_LIST_TEXT, ""]
+    lines.extend(texts.open_task_list_item(i, task) for i, task in enumerate(orders, start=1))
+    return "\n".join(lines), task_picker_kb(orders, admin_chat_id, "orders")
+
+
 @router.message(Command("orders"))
 async def cmd_orders(message: Message, session: AsyncSession) -> None:
     if message.chat.type not in ("group", "supergroup"):
@@ -363,14 +381,8 @@ async def cmd_orders(message: Message, session: AsyncSession) -> None:
     admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
     if not admin_chat:
         return
-
-    orders = await task_service.list_open_tasks(session, admin_chat.id, kind="order")
-    if not orders:
-        await message.answer(texts.NO_OPEN_ORDERS_TEXT)
-        return
-    lines = [texts.OPEN_ORDERS_LIST_TEXT, ""]
-    lines.extend(texts.open_task_list_item(i, task) for i, task in enumerate(orders, start=1))
-    await message.answer("\n".join(lines), reply_markup=task_picker_kb(orders))
+    text, kb = await _render_orders(session, admin_chat.id)
+    await message.answer(text, reply_markup=kb)
 
 
 # ---------------------------------------------------------------------------
@@ -378,25 +390,24 @@ async def cmd_orders(message: Message, session: AsyncSession) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _reply_my_tasks(message: Message, session: AsyncSession) -> None:
-    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
-    if not admin_chat:
-        return
-
-    my_tasks = await task_service.list_open_tasks_for_assignee(session, admin_chat.id, message.from_user.id)
+async def _render_my_tasks(session: AsyncSession, admin_chat_id: int, tg_user_id: int) -> tuple[str, object]:
+    my_tasks = await task_service.list_open_tasks_for_assignee(session, admin_chat_id, tg_user_id)
     if not my_tasks:
-        await message.answer(texts.NO_MY_TASKS_TEXT)
-        return
+        return texts.NO_MY_TASKS_TEXT, None
     lines = [texts.MY_TASKS_LIST_TEXT, ""]
     lines.extend(texts.my_task_list_item(i, task) for i, task in enumerate(my_tasks, start=1))
-    await message.answer("\n".join(lines), reply_markup=task_picker_kb(my_tasks))
+    return "\n".join(lines), task_picker_kb(my_tasks, admin_chat_id, "my")
 
 
 @router.message(Command("tasks", "mytasks"))
 async def cmd_mytasks(message: Message, session: AsyncSession) -> None:
     if message.chat.type not in ("group", "supergroup"):
         return
-    await _reply_my_tasks(message, session)
+    admin_chat = await admin_chat_service.get_admin_chat_by_tg_id(session, message.chat.id)
+    if not admin_chat:
+        return
+    text, kb = await _render_my_tasks(session, admin_chat.id, message.from_user.id)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(Command("done"))
@@ -464,13 +475,33 @@ async def cmd_setrole(message: Message, session: AsyncSession) -> None:
 
 @router.callback_query(F.data.startswith("task_view:"))
 async def cb_task_view(callback: CallbackQuery, session: AsyncSession) -> None:
-    task_id = int(callback.data.split(":")[1])
+    task_id, origin, admin_chat_id = _parse_task_cb(callback.data)
     task = await task_service.get_task(session, task_id)
     if not task:
         await callback.answer("Задача не найдена.", show_alert=True)
         return
-    kb = task_card_kb(task.id) if task.status == "open" else task_resolved_kb(task.id)
-    await callback.message.reply(texts.task_card_text(task), reply_markup=kb)
+    kb = (
+        task_card_kb(task.id, origin, admin_chat_id)
+        if task.status == "open"
+        else task_resolved_kb(task.id, origin, admin_chat_id)
+    )
+    await safe_edit(callback.message, texts.task_card_text(task), reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("task_back:"))
+async def cb_task_back(callback: CallbackQuery, session: AsyncSession) -> None:
+    _, origin, admin_chat_id_s = callback.data.split(":")
+    admin_chat_id = int(admin_chat_id_s)
+
+    if origin == "my":
+        text, kb = await _render_my_tasks(session, admin_chat_id, callback.from_user.id)
+    elif origin == "orders":
+        text, kb = await _render_orders(session, admin_chat_id)
+    else:
+        text, kb = await _render_open_tasks(session, admin_chat_id)
+
+    await safe_edit(callback.message, text, reply_markup=kb)
     await callback.answer()
 
 
@@ -508,7 +539,7 @@ async def cb_task_cancel(callback: CallbackQuery, session: AsyncSession, bot: Bo
 
 
 async def _apply_task_action(callback: CallbackQuery, session: AsyncSession, bot: Bot, *, action: str) -> None:
-    task_id = int(callback.data.split(":")[1])
+    task_id, origin, admin_chat_id = _parse_task_cb(callback.data)
     task = await task_service.get_task(session, task_id)
     if not task:
         await callback.answer("Задача не найдена.", show_alert=True)
@@ -544,14 +575,18 @@ async def _apply_task_action(callback: CallbackQuery, session: AsyncSession, bot
             "cancelled": texts.TASK_CANCEL_ANSWER,
         }[task.status]
 
-    card_kb = task_card_kb(task.id) if task.status == "open" else task_resolved_kb(task.id)
+    card_kb = (
+        task_card_kb(task.id, origin, admin_chat_id)
+        if task.status == "open"
+        else task_resolved_kb(task.id, origin, admin_chat_id)
+    )
     await _update_task_message(callback, bot, task, texts.task_card_text(task), card_kb)
     await callback.answer(answer_text)
 
 
 @router.callback_query(F.data.startswith("task_reopen:"))
 async def cb_task_reopen(callback: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
-    task_id = int(callback.data.split(":")[1])
+    task_id, origin, admin_chat_id = _parse_task_cb(callback.data)
     task = await task_service.get_task(session, task_id)
     if not task:
         await callback.answer("Задача не найдена.", show_alert=True)
@@ -565,7 +600,9 @@ async def cb_task_reopen(callback: CallbackQuery, session: AsyncSession, bot: Bo
         return
 
     task = await task_service.reopen_task(session, task_id)
-    await _update_task_message(callback, bot, task, texts.task_card_text(task), task_card_kb(task.id))
+    await _update_task_message(
+        callback, bot, task, texts.task_card_text(task), task_card_kb(task.id, origin, admin_chat_id)
+    )
     await callback.answer(texts.TASK_REOPEN_ANSWER)
 
 
