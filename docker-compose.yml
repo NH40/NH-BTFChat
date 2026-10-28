@@ -53,7 +53,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 192m
+    mem_limit: 256m
     logging: *default-logging
 
   # API Mini App — тот же образ, другая команда (миграции не гоняет — их делает bot).
@@ -71,7 +71,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 160m
+    mem_limit: 192m
     logging: *default-logging
 
   # Статика Mini App (внутренний HTTP :80 в сети edge, TLS — у Caddy UAP).
