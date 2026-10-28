@@ -12,7 +12,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandSc
 
 from bot.config import settings
 from bot.db import session_factory
-from bot.handlers import chats, moderation, relay, start, tasks
+from bot.handlers import chats, help as help_handlers, moderation, relay, start, tasks
 from bot.middlewares.core import AntispamMiddleware, DbSessionMiddleware, TrackMiddleware
 from bot.services import relay as relay_service
 from bot.services import chats as chats_service
@@ -49,13 +49,13 @@ async def main() -> None:
     dp.message.outer_middleware(TrackMiddleware())
     dp.callback_query.outer_middleware(TrackMiddleware())
     dp.message.outer_middleware(AntispamMiddleware())
-    dp.include_routers(start.router, chats.router, moderation.router, relay.router, tasks.router)
+    dp.include_routers(help_handlers.router, start.router, chats.router, moderation.router, relay.router, tasks.router)
 
     await _bootstrap(bot)
     await bot.set_my_commands([
         BotCommand(command="start", description="Панель BTF"),
         BotCommand(command="tasks", description="Мои задачи"),
-        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="help", description="Гайд по боту"),
     ], scope=BotCommandScopeAllPrivateChats())
     await bot.set_my_commands([
         BotCommand(command="ban", description="Бан [срок] [причина]"),
@@ -68,6 +68,7 @@ async def main() -> None:
         BotCommand(command="warns", description="Предупреждения"),
         BotCommand(command="rules", description="Правила чата"),
         BotCommand(command="tasks", description="Мои задачи"),
+        BotCommand(command="help", description="Команды бота"),
     ], scope=BotCommandScopeAllGroupChats())
 
     loops = [
