@@ -1,0 +1,13 @@
+# Внутренний статический сервер Mini App: без домена и TLS (их держит Caddy проекта UAP).
+:80 {
+	encode gzip
+	root * /srv/web
+	# index.html без кэша (иначе Telegram WebView держит старый бандл после деплоя),
+	# хэшированные assets — надолго. Матчеры не пересекаются, чтобы правила не перебивали друг друга.
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}

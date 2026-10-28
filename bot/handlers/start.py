@@ -1,48 +1,44 @@
+"""Личка с ботом: /start, /help — кнопка Mini App для команды."""
+from __future__ import annotations
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.filters import IsPrivateChat
-from bot.keyboards import help_menu_kb, help_section_kb, main_menu_kb
-from bot.services import users as user_service
-from bot.texts import WELCOME_TEXT
-from bot.texts.help import HELP_OVERVIEW, HELP_SECTIONS
-from bot.utils import safe_edit
+from bot.config import settings
+from bot.services import staff
 
 router = Router(name="start")
+router.message.filter(F.chat.type == "private")
+
+HELP = (
+    "<b>BTF — менеджмент команды</b>\n\n"
+    "🛡 <b>Модерация</b> (в чате, ответом на сообщение или @username / id):\n"
+    "/ban [срок] [причина] · /unban · /mute [срок] [причина] · /unmute · /kick · /warn [причина] · /unwarn · /warns\n"
+    "Срок: 30m, 2h, 1d, 1w — без срока навсегда.\n\n"
+    "📣 <b>Каналы</b> — бот пересылает посты из каналов в выбранные чаты; правки и удаления отслеживает.\n\n"
+    "✅ <b>Задачи</b> — доски, дедлайны, подзадачи, повторы и напоминания в чате админов.\n"
+    "/tasks — мои задачи (в личке или чате админов).\n\n"
+    "Всё настраивается в Mini App."
+)
 
 
-@router.message(CommandStart(), IsPrivateChat())
+def _app_keyboard() -> InlineKeyboardMarkup | None:
+    if not settings.mini_app_url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📋 Открыть BTF", web_app=WebAppInfo(url=settings.mini_app_url))]])
+
+
+@router.message(CommandStart())
 async def cmd_start(message: Message, session: AsyncSession) -> None:
-    await user_service.get_or_create_user(session, message.from_user.id, message.from_user.username)
-    await message.answer(WELCOME_TEXT, reply_markup=main_menu_kb())
+    role = await staff.role_of(session, message.from_user.id)
+    if role is None:
+        await message.answer("Это бот команды BTF. Доступ к панели — у владельца и админов команды.")
+        return
+    await message.answer(HELP, reply_markup=_app_keyboard())
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP_OVERVIEW, reply_markup=help_menu_kb())
-
-
-@router.callback_query(F.data == "help")
-async def cb_help(callback: CallbackQuery) -> None:
-    await safe_edit(callback.message, HELP_OVERVIEW, reply_markup=help_menu_kb())
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("help_section:"))
-async def cb_help_section(callback: CallbackQuery) -> None:
-    key = callback.data.split(":", 1)[1]
-    section = HELP_SECTIONS.get(key)
-    if section is None:
-        await callback.answer()
-        return
-    _label, text = section
-    await safe_edit(callback.message, text, reply_markup=help_section_kb())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "main_menu")
-async def cb_main_menu(callback: CallbackQuery) -> None:
-    await safe_edit(callback.message, WELCOME_TEXT, reply_markup=main_menu_kb())
-    await callback.answer()
+    await message.answer(HELP, reply_markup=_app_keyboard())

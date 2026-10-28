@@ -1,0 +1,11 @@
+# Сборка Mini App в node, в финальном образе — только caddy и готовая статика.
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM caddy:2-alpine
+COPY docker/Caddyfile.web /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv/web
